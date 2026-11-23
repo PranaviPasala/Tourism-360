@@ -12,7 +12,7 @@ and learn about local culture and heritage.
 - Plan your trips.
 
 ## Live Website
-https://tourism-360.netlify.app
+https://agent-6b03ef75940430e859725de8--tourism-360.netlify.app/
 
 ## Technologies
 - Frontend development
