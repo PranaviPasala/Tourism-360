@@ -1,0 +1,176 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Reusable Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Blueprint: UserProfile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'fullName', 'email', 'mobileNumber', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'fullName', 'email', 'mobileNumber', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.mobileNumber is string && data.mobileNumber.size() <= 24
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: PlannerPreferences
+    function isValidPlannerPreferences(data) {
+      return data.keys().hasAll(['userId', 'selectedDestinationIds', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'selectedDestinationIds', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.selectedDestinationIds is list
+        && data.selectedDestinationIds.size() <= 30
+        && (data.selectedDestinationIds.size() == 0 || data.selectedDestinationIds[0] is string)
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: TripPlan
+    function isValidBudgetBreakdown(b) {
+      return b is map
+        && b.keys().hasAll(['transportation', 'food', 'accommodation', 'localTravel', 'other'])
+        && b.keys().hasOnly(['transportation', 'food', 'accommodation', 'localTravel', 'other'])
+        && (b.transportation is int || b.transportation is float) && b.transportation >= 0
+        && (b.food is int || b.food is float) && b.food >= 0
+        && (b.accommodation is int || b.accommodation is float) && b.accommodation >= 0
+        && (b.localTravel is int || b.localTravel is float) && b.localTravel >= 0
+        && (b.other is int || b.other is float) && b.other >= 0;
+    }
+
+    function isValidTripPlan(data, tripId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'title', 'startingPoint', 'endingPoint', 'days', 'travellers',
+          'startDate', 'transportationPreference', 'selectedDestinationIds',
+          'budgetPerPerson', 'totalBudget', 'realisticMinimumEstimate',
+          'budgetBreakdown', 'itinerary', 'aiNotes', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'title', 'startingPoint', 'endingPoint', 'days', 'travellers',
+          'startDate', 'transportationPreference', 'selectedDestinationIds',
+          'budgetPerPerson', 'totalBudget', 'realisticMinimumEstimate',
+          'budgetBreakdown', 'itinerary', 'aiNotes', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == tripId
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.startingPoint is string && data.startingPoint.size() >= 1 && data.startingPoint.size() <= 160
+        && data.endingPoint is string && data.endingPoint.size() >= 1 && data.endingPoint.size() <= 160
+        && data.days is int && data.days >= 1 && data.days <= 60
+        && data.travellers is int && data.travellers >= 1 && data.travellers <= 100
+        && data.startDate is string && data.startDate.size() >= 4 && data.startDate.size() <= 32
+        && data.transportationPreference in [
+          'Public Bus', 'Government Bus', 'Train', 'Local Transport', 'Bike Rental', 'Car Rental'
+        ]
+        && data.selectedDestinationIds is list && data.selectedDestinationIds.size() <= 30
+        && (data.selectedDestinationIds.size() == 0 || data.selectedDestinationIds[0] is string)
+        && (data.budgetPerPerson is int || data.budgetPerPerson is float) && data.budgetPerPerson >= 0
+        && (data.totalBudget is int || data.totalBudget is float) && data.totalBudget >= 0
+        && (data.realisticMinimumEstimate is int || data.realisticMinimumEstimate is float) && data.realisticMinimumEstimate >= 0
+        && isValidBudgetBreakdown(data.budgetBreakdown)
+        && data.itinerary is list && data.itinerary.size() <= 60
+        && (data.itinerary.size() == 0 || data.itinerary[0] is map)
+        && data.aiNotes is string && data.aiNotes.size() <= 4000
+        && data.status in ['planned', 'active', 'completed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Users Collection (PII strictly isolated to owner)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'mobileNumber', 'updatedAt']);
+      allow delete: if false;
+
+      // Planner Preferences subcollection
+      match /preferences/{prefId} {
+        allow get: if isValidId(userId) && isValidId(prefId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(prefId)
+          && isOwner(userId)
+          && isValidPlannerPreferences(incoming())
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(prefId)
+          && isOwner(userId)
+          && isValidPlannerPreferences(incoming())
+          && incoming().userId == existing().userId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['selectedDestinationIds', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(prefId) && isOwner(userId);
+      }
+
+      // Saved Trips subcollection
+      match /trips/{tripId} {
+        allow get: if isValidId(userId) && isValidId(tripId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(tripId)
+          && isOwner(userId)
+          && isValidTripPlan(incoming(), tripId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(tripId)
+          && isOwner(userId)
+          && existing().status != 'completed'
+          && isValidTripPlan(incoming(), tripId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'startingPoint', 'endingPoint', 'days', 'travellers', 'startDate',
+              'transportationPreference', 'selectedDestinationIds', 'budgetPerPerson',
+              'totalBudget', 'realisticMinimumEstimate', 'budgetBreakdown', 'itinerary',
+              'aiNotes', 'updatedAt'
+            ]))
+            ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          );
+        allow delete: if isValidId(userId) && isValidId(tripId) && isOwner(userId);
+      }
+    }
+  }
+}

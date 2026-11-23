@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered Tourism 360 user profile with private contact details.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "mobileNumber": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 24
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "fullName", "email", "mobileNumber", "createdAt", "updatedAt"]
+    },
+    "PlannerPreferences": {
+      "title": "PlannerPreferences",
+      "description": "User selected destination IDs for trip planning.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "selectedDestinationIds": {
+          "type": "array",
+          "description": "Bounded list of up to 30 selected destination identifiers."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "selectedDestinationIds", "updatedAt"]
+    },
+    "TripPlan": {
+      "title": "TripPlan",
+      "description": "Private saved trip plan with budget breakdown, transport mode, selected destinations, and day-wise itinerary.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "startingPoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "endingPoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "days": {
+          "type": "integer"
+        },
+        "travellers": {
+          "type": "integer"
+        },
+        "startDate": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "transportationPreference": {
+          "type": "string",
+          "enum": [
+            "Public Bus",
+            "Government Bus",
+            "Train",
+            "Local Transport",
+            "Bike Rental",
+            "Car Rental"
+          ]
+        },
+        "selectedDestinationIds": {
+          "type": "array"
+        },
+        "budgetPerPerson": {
+          "type": "number"
+        },
+        "totalBudget": {
+          "type": "number"
+        },
+        "realisticMinimumEstimate": {
+          "type": "number"
+        },
+        "budgetBreakdown": {
+          "type": "object",
+          "properties": {
+            "transportation": { "type": "number" },
+            "food": { "type": "number" },
+            "accommodation": { "type": "number" },
+            "localTravel": { "type": "number" },
+            "other": { "type": "number" }
+          },
+          "required": ["transportation", "food", "accommodation", "localTravel", "other"]
+        },
+        "itinerary": {
+          "type": "array"
+        },
+        "aiNotes": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["planned", "active", "completed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "title",
+        "startingPoint",
+        "endingPoint",
+        "days",
+        "travellers",
+        "startDate",
+        "transportationPreference",
+        "selectedDestinationIds",
+        "budgetPerPerson",
+        "totalBudget",
+        "realisticMinimumEstimate",
+        "budgetBreakdown",
+        "itinerary",
+        "aiNotes",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user account profile owned strictly by the authenticated user."
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": { "$ref": "#/entities/PlannerPreferences" },
+      "description": "User trip-planning preferences including selected destination IDs."
+    },
+    "/users/{userId}/trips/{tripId}": {
+      "schema": { "$ref": "#/entities/TripPlan" },
+      "description": "Private saved trip plans, itineraries, and budgets owned by the user."
+    }
+  }
+}
